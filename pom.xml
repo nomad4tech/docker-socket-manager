@@ -16,6 +16,14 @@
     <connection>scm:git:git://github.com/nomad4tech/docker-socket-manager.git</connection>
   </scm>
 
+  <distributionManagement>
+    <repository>
+      <id>github</id>
+      <name>GitHub Packages</name>
+      <url>https://maven.pkg.github.com/nomad4tech/docker-socket-manager</url>
+    </repository>
+  </distributionManagement>
+
   <properties>
     <java.version>17</java.version>
     <docker-java.version>3.3.4</docker-java.version>
