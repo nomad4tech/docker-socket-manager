@@ -40,7 +40,7 @@ All connections are pooled in memory and reused across calls. Dead connections a
 implementation 'tech.nomad4:docker-socket-manager:0.1.0'
 ```
 
-> Currently published to GitHub Packages. See [GitHub Packages setup](#github-packages-setup) below.
+> Currently published to GitHub Packages and JitPack. See [Package registry setup](#package-registry-setup) below.
 
 ## Usage
 
@@ -148,7 +148,11 @@ echo "DOCKER_GROUP_ID=$(getent group docker | cut -d: -f3)" >> .env
 | `remoteDockerSocketPath` | `String` | Docker socket path on remote host |
 | `remoteSocatPort` | `Integer` | TCP port socat will listen on (or already listens on) |
 
-## GitHub Packages setup
+## Package registry setup
+
+### GitHub Packages
+
+Requires a GitHub account and a personal access token with `read:packages` scope (GitHub → Settings → Developer settings → Personal access tokens).
 
 Add the repository to your `pom.xml`:
 
@@ -173,7 +177,26 @@ Add credentials to `~/.m2/settings.xml`:
 </servers>
 ```
 
-> Generate a token at GitHub → Settings → Developer settings → Personal access tokens → with `read:packages` scope.
+### JitPack
+
+No token or credentials required. Add the repository and use the JitPack `groupId`:
+
+```xml
+<repositories>
+    <repository>
+        <id>jitpack.io</id>
+        <url>https://jitpack.io</url>
+    </repository>
+</repositories>
+```
+
+```xml
+<dependency>
+    <groupId>com.github.nomad4tech</groupId>
+    <artifactId>docker-socket-manager</artifactId>
+    <version>0.1.0</version>
+</dependency>
+```
 
 ## Known limitations
 
