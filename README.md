@@ -4,6 +4,8 @@
 [![Maven](https://img.shields.io/badge/maven-0.1.0-blue)](https://github.com/nomad4tech/docker-socket-manager/packages/2924050)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
+> See it in action: [docker-socket-manager-demo](https://github.com/nomad4tech/docker-socket-manager-demo)
+
 A Java library for connecting to Docker daemons over local Unix sockets or remote SSH tunnels with automatic socat relay management.
 
 Built to be embedded in backend applications that need to manage Docker containers remotely - for example, triggering database backups, scaling services, or monitoring container state across multiple hosts.
