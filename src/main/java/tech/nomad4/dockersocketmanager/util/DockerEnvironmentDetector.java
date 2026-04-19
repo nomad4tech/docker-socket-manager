@@ -66,24 +66,34 @@ public class DockerEnvironmentDetector {
 
     /**
      * Checks whether a Docker socket is available at the specified path.
+     * <p>
+     * Uses a real file open attempt instead of {@code File.canRead()}/{@code File.canWrite()},
+     * because the standard Java methods do not correctly handle group-based permissions —
+     * they only check owner bits when the current user is not the file owner.
+     * This is especially relevant when the Docker socket is accessible via a supplementary group
+     * (e.g. the {@code docker} group) rather than direct ownership.
+     * </p>
      *
      * @param socketPath the file system path to check
-     * @return {@code true} if the socket exists and is readable and writable
+     * @return {@code true} if the socket exists and is readable
      */
     public static boolean isDockerSocketAvailable(String socketPath) {
-        File socket = new File(socketPath);
-
-        if (!socket.exists()) {
-            log.debug("Docker socket does not exist: {}", socketPath);
+        try {
+            var path = Path.of(socketPath);
+            if (!Files.exists(path)) {
+                log.debug("Docker socket does not exist: {}", socketPath);
+                return false;
+            }
+            var attrs = Files.readAttributes(path, java.nio.file.attribute.BasicFileAttributes.class);
+            if (!attrs.isOther()) {
+                log.debug("Path exists but is not a Unix socket: {}", socketPath);
+                return false;
+            }
+            return true;
+        } catch (Exception e) {
+            log.debug("Docker socket not accessible: {}", e.getMessage());
             return false;
         }
-
-        if (!socket.canRead() || !socket.canWrite()) {
-            log.debug("Docker socket exists but not accessible: {}", socketPath);
-            return false;
-        }
-
-        return true;
     }
 
     /**

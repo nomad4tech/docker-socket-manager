@@ -9,7 +9,6 @@ import java.io.IOException;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 class DockerEnvironmentDetectorTest {
 
@@ -19,15 +18,9 @@ class DockerEnvironmentDetectorTest {
     }
 
     @Test
-    void isDockerSocketAvailable_returnsFalseForPathWithoutReadPermission(@TempDir Path tempDir) throws IOException {
-        // Skip this test when running as root, since root bypasses file permission checks
-        assumeFalse("root".equals(System.getProperty("user.name")), "Skipping permission test when running as root");
-
+    void isDockerSocketAvailable_returnsFalseForRegularFile(@TempDir Path tempDir) throws IOException {
         File tempFile = tempDir.resolve("docker.sock").toFile();
         tempFile.createNewFile();
-        tempFile.setReadable(false);
-        tempFile.setWritable(false);
-
         assertFalse(DockerEnvironmentDetector.isDockerSocketAvailable(tempFile.getAbsolutePath()));
     }
 }
