@@ -1,7 +1,7 @@
 # docker-socket-manager
 
 [![Build](https://github.com/nomad4tech/docker-socket-manager/actions/workflows/publish.yml/badge.svg)](https://github.com/nomad4tech/docker-socket-manager/actions/workflows/publish.yml)
-[![Maven](https://img.shields.io/badge/maven-0.1.0-blue)](https://github.com/nomad4tech/docker-socket-manager/packages/2924050)
+[![Maven](https://img.shields.io/badge/maven-0.2.0-blue)](https://github.com/nomad4tech/docker-socket-manager/packages/2924050)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 > See it in action: [docker-socket-manager-demo](https://github.com/nomad4tech/docker-socket-manager-demo)
@@ -36,14 +36,14 @@ All connections are pooled in memory and reused across calls. Dead connections a
 <dependency>
     <groupId>tech.nomad4</groupId>
     <artifactId>docker-socket-manager</artifactId>
-    <version>0.1.0</version>
+    <version>0.2.0</version>
 </dependency>
 ```
 
 ### Gradle
 
 ```groovy
-implementation 'tech.nomad4:docker-socket-manager:0.1.0'
+implementation 'tech.nomad4:docker-socket-manager:0.2.0'
 ```
 
 > Currently published to GitHub Packages and JitPack. See [Package registry setup](#package-registry-setup) below.
@@ -206,7 +206,7 @@ No token or credentials required. Add the repository and use the JitPack `groupI
 <dependency>
     <groupId>com.github.nomad4tech</groupId>
     <artifactId>docker-socket-manager</artifactId>
-    <version>0.1.0</version>
+    <version>0.2.0</version>
 </dependency>
 ```
 
