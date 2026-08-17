@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- `OkDockerHttpClient` had no connect/read timeout configured - the underlying transport
+  defaults `readTimeout` to `0` (unbounded) when unset, so any Docker API call over a
+  pooled `DockerClient` (local or SSH) could hang forever if the connection had silently
+  gone dead, instead of failing fast. Both client creation sites (`connectLocal`,
+  `createDockerClient`) now set explicit timeouts - configurable via
+  `DockerSocketConfig.connectTimeoutMillis`/`readTimeoutMillis`, defaulting to 10s/30s
+  (`DockerSocketService.DEFAULT_CONNECT_TIMEOUT_MILLIS`/`DEFAULT_READ_TIMEOUT_MILLIS`).
+
+### Added
+- `DockerSocketConfig.sshHostKeyFingerprint` - when set, SSH host key is verified against
+  this fingerprint (`ssh-keygen -lf` format) via sshj's `FingerprintVerifier`. Falls back
+  to `PromiscuousVerifier` (accept any key, logged as a warning) when unset, for backward
+  compatibility.
+- `DockerSocketConfig.sshKeyPassphrase` - passphrase support for encrypted private keys at
+  `sshPrivateKeyPath` (previously silently unsupported - `loadKeys()` was always called
+  with no passphrase overload).
+
+---
+
 ## [0.1.1] - 2026-04-19
 
 ### Fixed

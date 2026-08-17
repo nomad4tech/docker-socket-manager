@@ -77,6 +77,8 @@ DockerSocketConfig config = DockerSocketConfig.builder()
         .sshPort(22)
         .sshUser("ubuntu")
         .sshPrivateKeyPath("/home/user/.ssh/id_rsa")   // or use sshPassword
+        .sshKeyPassphrase("keyPassphrase")             // only if the key above is encrypted
+        .sshHostKeyFingerprint("SHA256:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx") // ssh-keygen -lf; omit to accept any host key
         .remoteDockerSocketPath("/var/run/docker.sock")
         .remoteSocatPort(2375)
         .build();
@@ -151,8 +153,12 @@ echo "DOCKER_GROUP_ID=$(getent group docker | cut -d: -f3)" >> .env
 | `sshUser` | `String` | SSH username (REMOTE_SSH only) |
 | `sshPassword` | `String` | SSH password - use key auth in production |
 | `sshPrivateKeyPath` | `String` | Path to private key file (preferred over password) |
+| `sshKeyPassphrase` | `String` | Passphrase for an encrypted private key at `sshPrivateKeyPath` - optional |
+| `sshHostKeyFingerprint` | `String` | Expected SSH host key fingerprint (`ssh-keygen -lf` format, e.g. `SHA256:...`) - if unset, any host key is accepted |
 | `remoteDockerSocketPath` | `String` | Docker socket path on remote host |
 | `remoteSocatPort` | `Integer` | TCP port socat will listen on (or already listens on) |
+| `connectTimeoutMillis` | `Integer` | Docker HTTP client connect timeout - defaults to `DockerSocketService.DEFAULT_CONNECT_TIMEOUT_MILLIS` (10s) |
+| `readTimeoutMillis` | `Integer` | Docker HTTP client per-call read timeout - defaults to `DockerSocketService.DEFAULT_READ_TIMEOUT_MILLIS` (30s) |
 
 ## Package registry setup
 
@@ -206,9 +212,11 @@ No token or credentials required. Add the repository and use the JitPack `groupI
 
 ## Known limitations
 
-- SSH host key verification is currently disabled (`PromiscuousVerifier`). Do not use in security-sensitive environments without adding `known_hosts` verification - this will be configurable in a future release.
+- SSH host key verification is skipped (`PromiscuousVerifier`) unless `DockerSocketConfig.sshHostKeyFingerprint` is set - without it, any host key is accepted (MITM risk). Set the fingerprint (format from `ssh-keygen -lf`, e.g. `SHA256:...`) to enable verification.
 - Only `LOCAL` and `REMOTE_SSH` connection types are supported. Direct TCP (`REMOTE_TCP`) and TLS are planned.
 - No built-in health check scheduler - connection liveness is checked lazily on `getClient()`. Schedule `isAlive()` / `evict()` calls from your application layer if you need proactive monitoring.
+- `connectTimeoutMillis`/`readTimeoutMillis` apply per HTTP call on the underlying Docker client, including to any streaming endpoint (log follow, exec attach) invoked through the returned `DockerClient` - don't set them lower than the longest idle gap you expect on such a stream.
+- `ensureSocatRunning()`'s occupied-port check and the actual `socat` start are not atomic (check-then-act). If something else on the remote host (e.g. a systemd-managed `socat` unit) binds the same port between the check and the start, both can end up racing for it. Not fixed in this release - if you manage `socat` externally, make sure it's already listening before this library ever tries to connect.
 
 ## Dependencies
 

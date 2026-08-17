@@ -11,6 +11,8 @@ import net.schmizz.sshj.SSHClient;
 import net.schmizz.sshj.common.IOUtils;
 import net.schmizz.sshj.connection.channel.direct.Session;
 import net.schmizz.sshj.connection.channel.direct.Session.Command;
+import net.schmizz.sshj.transport.verification.FingerprintVerifier;
+import net.schmizz.sshj.transport.verification.HostKeyVerifier;
 import net.schmizz.sshj.transport.verification.PromiscuousVerifier;
 import net.schmizz.sshj.userauth.keyprovider.KeyProvider;
 import tech.nomad4.dockersocketmanager.connection.DockerConnection;
@@ -39,11 +41,18 @@ import java.util.concurrent.TimeUnit;
  * <p>Status persistence and health-check scheduling are the responsibility
  * of the application layer (e.g., {@code SocketHealthCheckService}).</p>
  *
- * <p><strong>Security note:</strong> SSH host key verification is currently
- * disabled via {@code PromiscuousVerifier}. Use known-hosts verification in production.</p>
+ * <p><strong>Security note:</strong> SSH host key verification is skipped
+ * ({@code PromiscuousVerifier}) unless {@link DockerSocketConfig#getSshHostKeyFingerprint()}
+ * is set — set it to enable verification in production.</p>
  */
 @Slf4j
 public class DockerSocketService implements AutoCloseable {
+
+    /** Default connect timeout applied when {@link DockerSocketConfig#getConnectTimeoutMillis()} is unset. */
+    public static final int DEFAULT_CONNECT_TIMEOUT_MILLIS = 10_000;
+
+    /** Default read timeout applied when {@link DockerSocketConfig#getReadTimeoutMillis()} is unset. */
+    public static final int DEFAULT_READ_TIMEOUT_MILLIS = 30_000;
 
     private final Map<Long, DockerConnection> activeConnections = new ConcurrentHashMap<>();
 
@@ -165,13 +174,7 @@ public class DockerSocketService implements AutoCloseable {
     private DockerConnection connectLocal(Long id, DockerSocketConfig config) {
         try {
             String dockerHost = "unix://" + config.getSocketPath();
-            DockerClientConfig clientConfig = DefaultDockerClientConfig.createDefaultConfigBuilder()
-                    .withDockerHost(dockerHost)
-                    .build();
-            DockerHttpClient httpClient = new OkDockerHttpClient.Builder()
-                    .dockerHost(clientConfig.getDockerHost())
-                    .build();
-            DockerClient client = DockerClientImpl.getInstance(clientConfig, httpClient);
+            DockerClient client = createDockerClient(dockerHost, config);
             client.pingCmd().exec();
             return new LocalDockerConnection(id, client);
         } catch (Exception e) {
@@ -199,7 +202,7 @@ public class DockerSocketService implements AutoCloseable {
             int localPort = findFreePort();
             tunnel = new SSHTunnel(sshClient, localPort, "127.0.0.1", socatResult.getPort());
 
-            DockerClient client = createDockerClient("tcp://localhost:" + localPort);
+            DockerClient client = createDockerClient("tcp://localhost:" + localPort, config);
             client.pingCmd().exec();
 
             log.info("Docker client connected via SSH tunnel on local port {}", localPort);
@@ -223,16 +226,20 @@ public class DockerSocketService implements AutoCloseable {
     /**
      * Establishes an SSH connection to the remote host.
      *
-     * <p><strong>Warning:</strong> Host key verification is currently disabled.</p>
+     * <p><strong>Warning:</strong> when {@link DockerSocketConfig#getSshHostKeyFingerprint()}
+     * is not set, host key verification is skipped entirely ({@link PromiscuousVerifier}) —
+     * accepts any host key, a MITM risk. Set the fingerprint to enable verification.</p>
      */
     private SSHClient connectSSH(DockerSocketConfig config) throws IOException {
         SSHClient sshClient = new SSHClient();
-        sshClient.addHostKeyVerifier(new PromiscuousVerifier());
+        sshClient.addHostKeyVerifier(hostKeyVerifier(config));
         sshClient.connect(config.getSshHost(), config.getSshPort());
         log.info("SSH connected to {}:{}", config.getSshHost(), config.getSshPort());
 
         if (config.getSshPrivateKeyPath() != null && !config.getSshPrivateKeyPath().isEmpty()) {
-            KeyProvider keyProvider = sshClient.loadKeys(config.getSshPrivateKeyPath());
+            KeyProvider keyProvider = config.getSshKeyPassphrase() != null && !config.getSshKeyPassphrase().isEmpty()
+                    ? sshClient.loadKeys(config.getSshPrivateKeyPath(), config.getSshKeyPassphrase().toCharArray())
+                    : sshClient.loadKeys(config.getSshPrivateKeyPath());
             sshClient.authPublickey(config.getSshUser(), keyProvider);
             log.info("SSH authenticated with private key");
         } else if (config.getSshPassword() != null && !config.getSshPassword().isEmpty()) {
@@ -242,6 +249,24 @@ public class DockerSocketService implements AutoCloseable {
             throw new DockerConnectionException("No SSH authentication method provided");
         }
         return sshClient;
+    }
+
+    /**
+     * Resolves the SSH host key verifier for a connection.
+     * <p>
+     * Falls back to {@link PromiscuousVerifier} (accepts any key) when no fingerprint is
+     * configured, to stay backward compatible with existing configs — logs a loud warning
+     * in that case so the gap isn't silent.
+     */
+    private HostKeyVerifier hostKeyVerifier(DockerSocketConfig config) {
+        String fingerprint = config.getSshHostKeyFingerprint();
+        if (fingerprint != null && !fingerprint.isEmpty()) {
+            return FingerprintVerifier.getInstance(fingerprint);
+        }
+        log.warn("No sshHostKeyFingerprint configured for SSH host {} - host key verification is " +
+                "DISABLED (accepting any key, MITM risk). Set DockerSocketConfig.sshHostKeyFingerprint " +
+                "to enable verification.", config.getSshHost());
+        return new PromiscuousVerifier();
     }
 
     private SocatSetupResult ensureSocatRunning(SSHClient ssh, DockerSocketConfig config) throws IOException {
@@ -372,14 +397,20 @@ public class DockerSocketService implements AutoCloseable {
         }
     }
 
-    private DockerClient createDockerClient(String dockerHost) {
-        DockerClientConfig config = DefaultDockerClientConfig.createDefaultConfigBuilder()
+    private DockerClient createDockerClient(String dockerHost, DockerSocketConfig socketConfig) {
+        DockerClientConfig clientConfig = DefaultDockerClientConfig.createDefaultConfigBuilder()
                 .withDockerHost(dockerHost)
                 .build();
+        int connectTimeout = socketConfig.getConnectTimeoutMillis() != null
+                ? socketConfig.getConnectTimeoutMillis() : DEFAULT_CONNECT_TIMEOUT_MILLIS;
+        int readTimeout = socketConfig.getReadTimeoutMillis() != null
+                ? socketConfig.getReadTimeoutMillis() : DEFAULT_READ_TIMEOUT_MILLIS;
         DockerHttpClient httpClient = new OkDockerHttpClient.Builder()
-                .dockerHost(config.getDockerHost())
+                .dockerHost(clientConfig.getDockerHost())
+                .connectTimeout(connectTimeout)
+                .readTimeout(readTimeout)
                 .build();
-        return DockerClientImpl.getInstance(config, httpClient);
+        return DockerClientImpl.getInstance(clientConfig, httpClient);
     }
 
     private int findFreePort() throws IOException {

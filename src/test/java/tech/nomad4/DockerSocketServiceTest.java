@@ -1,6 +1,9 @@
 package tech.nomad4;
 
 import com.github.dockerjava.api.DockerClient;
+import net.schmizz.sshj.transport.verification.FingerprintVerifier;
+import net.schmizz.sshj.transport.verification.HostKeyVerifier;
+import net.schmizz.sshj.transport.verification.PromiscuousVerifier;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -12,6 +15,7 @@ import tech.nomad4.dockersocketmanager.model.SocketType;
 import tech.nomad4.dockersocketmanager.service.DockerSocketService;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -104,6 +108,38 @@ class DockerSocketServiceTest {
         activeConnections().put(1L, mockConnection);
 
         assertFalse(service.isAlive(1L));
+    }
+
+    private HostKeyVerifier hostKeyVerifier(DockerSocketConfig config) throws Exception {
+        Method method = DockerSocketService.class.getDeclaredMethod("hostKeyVerifier", DockerSocketConfig.class);
+        method.setAccessible(true);
+        return (HostKeyVerifier) method.invoke(service, config);
+    }
+
+    @Test
+    void hostKeyVerifier_usesFingerprintVerifierWhenFingerprintConfigured() throws Exception {
+        DockerSocketConfig config = DockerSocketConfig.builder()
+                .id(1L)
+                .type(SocketType.REMOTE_SSH)
+                .sshHost("host")
+                .sshHostKeyFingerprint("SHA256:ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890abcd123")
+                .build();
+
+        assertEquals(
+                FingerprintVerifier.getInstance("SHA256:ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890abcd123").getClass(),
+                hostKeyVerifier(config).getClass()
+        );
+    }
+
+    @Test
+    void hostKeyVerifier_fallsBackToPromiscuousWhenFingerprintAbsent() throws Exception {
+        DockerSocketConfig config = DockerSocketConfig.builder()
+                .id(1L)
+                .type(SocketType.REMOTE_SSH)
+                .sshHost("host")
+                .build();
+
+        assertInstanceOf(PromiscuousVerifier.class, hostKeyVerifier(config));
     }
 
     private DockerSocketConfig minimalConfig() {
